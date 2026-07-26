@@ -1,0 +1,13 @@
+# Keep shell scripts and k8s manifests LF so they run correctly in Linux/Cloud Shell.
+*.sh    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.json  text eol=lf
+*.sav   text eol=lf
+
+# Treat binaries as-is.
+*.pptx  binary
+*.JPG   binary
+*.jpg   binary
+*.png   binary
+*.jmx   text eol=lf

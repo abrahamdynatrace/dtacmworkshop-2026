@@ -1,0 +1,47 @@
+# Dynatrace DynaKube custom resource (modern replacement for the 2021 OneAgent Operator + ActiveGate VM).
+# - cloudNativeFullStack injects OneAgent into dev/production pods automatically.
+# - The embedded ActiveGate with `kubernetes-monitoring` registers this cluster in Dynatrace
+#   automatically, replacing the old utils/configureag.sh classic API flow and the Debian-9 GCE VM.
+#
+# The token secret must be named exactly `dynakube` (same as metadata.name) and contain:
+#   apiToken        -> Dynatrace API/operator token (scopes below)
+#   dataIngestToken -> data ingest token (metrics.ingest, logs.ingest, openTelemetryTrace.ingest)
+# It is created by utils/deploy-dt-operator.sh from ../1-Credentials/creds.json.
+#
+# DT_API_URL_PLACEHOLDER is replaced at deploy time with:
+#   https://<TENANT_ID>.live.dynatrace.com/api   (SaaS)
+---
+apiVersion: dynatrace.com/v1beta5
+kind: DynaKube
+metadata:
+  name: dynakube
+  namespace: dynatrace
+  annotations:
+    feature.dynatrace.com/injection-readonly-volume: "true"
+spec:
+  apiUrl: DT_API_URL_PLACEHOLDER
+  # Skip TLS verification is only needed for self-signed Managed tenants; harmless for SaaS.
+  skipCertCheck: false
+  metadataEnrichment:
+    enabled: true
+  oneAgent:
+    cloudNativeFullStack:
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+  activeGate:
+    capabilities:
+      - routing
+      - kubernetes-monitoring
+      - dynatrace-api
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1.5Gi

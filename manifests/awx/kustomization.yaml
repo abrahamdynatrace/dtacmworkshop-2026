@@ -1,0 +1,15 @@
+# Installs the AWX Operator (modern replacement for Ansible Tower 3.3.1, which is EOL).
+# Applied with:  kubectl apply -k manifests/awx
+#
+# Pin AWX_OPERATOR_VERSION here and in awx-cr expectations. Bump the ref/newTag together.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: awx
+
+resources:
+  - github.com/ansible/awx-operator/config/default?ref=2.19.1
+
+images:
+  - name: quay.io/ansible/awx-operator
+    newTag: 2.19.1

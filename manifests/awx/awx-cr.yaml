@@ -1,0 +1,14 @@
+# AWX instance managed by the AWX Operator.
+# The operator provisions PostgreSQL, the web/task pods, and an admin account.
+# Admin username defaults to "admin"; the password is generated into secret "awx-admin-password".
+# Exposed via a LoadBalancer service named "awx-service".
+---
+apiVersion: awx.ansible.com/v1beta1
+kind: AWX
+metadata:
+  name: awx
+  namespace: awx
+spec:
+  service_type: LoadBalancer
+  # Uncomment to pin the admin user secret to a known name:
+  # admin_user: admin
