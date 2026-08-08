@@ -1,7 +1,12 @@
 # AWX instance managed by the AWX Operator.
 # The operator provisions PostgreSQL, the web/task pods, and an admin account.
 # Admin username defaults to "admin"; the password is generated into secret "awx-admin-password".
-# Exposed via a LoadBalancer service named "awx-service".
+#
+# 2026 security: service_type is ClusterIP (NOT LoadBalancer) so AWX has NO public exposure.
+#   - Admin UI access:      kubectl -n awx port-forward svc/awx-service 8080:80  -> http://localhost:8080
+#   - Self-healing trigger: the in-cluster remediation poller (manifests/remediation-poller)
+#     reaches AWX over internal DNS (awx-service.awx.svc.cluster.local) instead of Dynatrace
+#     SaaS pushing a webhook to a public endpoint.
 ---
 apiVersion: awx.ansible.com/v1beta1
 kind: AWX
@@ -9,6 +14,4 @@ metadata:
   name: awx
   namespace: awx
 spec:
-  service_type: LoadBalancer
-  # Uncomment to pin the admin user secret to a known name:
-  # admin_user: admin
+  service_type: ClusterIP

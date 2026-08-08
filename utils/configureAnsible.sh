@@ -37,19 +37,23 @@ for i in $(seq 1 30); do
     sleep 10
 done
 
-echo "Resolving the AWX LoadBalancer IP..."
-AWX_IP=""
-for i in $(seq 1 60); do
-    AWX_IP=$(kubectl -n awx get svc awx-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
-    [ -n "$AWX_IP" ] && break
-    echo "  ...waiting for awx-service IP ($i/60)"; sleep 10
-done
-[ -n "$AWX_IP" ] || { echo "Could not resolve awx-service IP. Check: kubectl -n awx get svc awx-service"; exit 1; }
+# AWX is ClusterIP (no public IP), so reach its API through a local port-forward.
+echo "Opening a port-forward to AWX (ClusterIP)..."
+kubectl -n awx port-forward svc/awx-service 8080:80 >/tmp/awx-portforward.log 2>&1 &
+PF_PID=$!
+trap 'kill $PF_PID 2>/dev/null || true' EXIT
 
-AWX_URL="http://$AWX_IP"
+AWX_URL="http://localhost:8080"
 AWX_USER="admin"
 AWX_PASS=$(kubectl -n awx get secret awx-admin-password -o jsonpath='{.data.password}' | base64 --decode)
-echo "AWX is reachable at $AWX_URL (user: $AWX_USER)"
+
+echo "Waiting for the AWX API to answer via the port-forward..."
+for i in $(seq 1 30); do
+    if curl -s -o /dev/null "$AWX_URL/api/v2/ping/"; then break; fi
+    sleep 2
+done
+curl -s -o /dev/null "$AWX_URL/api/v2/ping/" || { echo "Could not reach AWX via port-forward. Check: kubectl -n awx get pods"; exit 1; }
+echo "AWX reachable at $AWX_URL (user: $AWX_USER)"
 
 # curl helper for the AWX REST API (api/v2).
 awx_api() {
@@ -189,7 +193,11 @@ done
 
 echo "----------------------------------------------------"
 echo "AWX configured successfully!"
-echo "AWX UI      : $AWX_URL  (user: admin / password above)"
-echo "Set this remediation URL as the Ansible/AWX webhook target in Dynatrace notifications:"
-echo "  $AWX_URL/api/v2/job_templates/$REMEDIATION_TEMPLATE_ID/launch/"
+echo "AWX UI (via port-forward): kubectl -n awx port-forward svc/awx-service 8080:80  -> http://localhost:8080"
+echo "  user: admin   password: (kubectl -n awx get secret awx-admin-password -o jsonpath='{.data.password}' | base64 -d)"
+echo ""
+echo "Self-healing trigger: DO NOT expose AWX or set a Dynatrace webhook."
+echo "Instead deploy the in-cluster remediation poller (reaches AWX internally):"
+echo "  ../utils/deploy-remediation-poller.sh"
+echo "It launches the 'remediation' job template (id $REMEDIATION_TEMPLATE_ID) for open Dynatrace problems."
 echo "----------------------------------------------------"

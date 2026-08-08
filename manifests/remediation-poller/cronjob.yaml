@@ -1,0 +1,56 @@
+# In-cluster self-healing poller (2026). Replaces the public Dynatrace -> AWX webhook.
+# Every minute it checks Dynatrace for open problems (through the in-cluster ActiveGate)
+# and launches the AWX 'remediation' job template over internal DNS. AWX stays ClusterIP.
+#
+# Requires (created by utils/deploy-remediation-poller.sh):
+#   - secret  dynatrace-remediation-token  (key: apiToken; scopes problems.read + problems.write)
+#   - configmap remediation-poller-config  (DT_API_BASE, AWX_BASE, PROBLEM_SELECTOR, ...)
+#   - configmap remediation-poller-script  (manifests/remediation-poller/poller-script.yaml)
+#   - secret  awx-admin-password           (created by the AWX operator)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: remediation-poller
+  namespace: awx
+spec:
+  schedule: "* * * * *"        # every minute
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 110
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: false
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: poller
+              image: alpine:3.20
+              command: ["sh", "/scripts/poll.sh"]
+              envFrom:
+                - configMapRef:
+                    name: remediation-poller-config
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                - name: dt-token
+                  mountPath: /secrets/dt
+                  readOnly: true
+                - name: awx-pass
+                  mountPath: /secrets/awx
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: remediation-poller-script
+            - name: dt-token
+              secret:
+                secretName: dynatrace-remediation-token
+            - name: awx-pass
+              secret:
+                secretName: awx-admin-password

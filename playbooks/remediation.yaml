@@ -3,15 +3,23 @@
   hosts: localhost
   vars:
     relative_time: "hour"
+    # 2026: comment via Dynatrace Problems API v2 (was api/v1). `pid` is a v2 problemId
+    # supplied by the in-cluster poller (or Dynatrace's Ansible integration).
+    dt_comment_url: "{{ tenanturl }}/api/v2/problems/{{ pid }}/comments"
+    dt_auth_header: "Api-Token {{ DYNATRACE_API_TOKEN }}"
   gather_facts: False
 
   tasks:
     - name: push comment to dynatrace
       uri:
-        url: "{{dtcommentapiurl}}"
+        url: "{{ dt_comment_url }}"
         method: POST
+        headers:
+          Authorization: "{{ dt_auth_header }}"
         body_format: json
-        body: "{ \"comment\": \"Remediation playbook started.\", \"user\": \"{{commentuser}}\", \"context\": \"Ansible Tower\" }"
+        body: { "message": "Remediation playbook started.", "context": "{{ commentuser }}" }
+        status_code: [200, 201]
+        validate_certs: no
       when: state == "OPEN"
 
     - name: get entityId
@@ -56,16 +64,24 @@
 
     - name: push success comment to dynatrace
       uri:
-        url: "{{dtcommentapiurl}}"
+        url: "{{ dt_comment_url }}"
         method: POST
+        headers:
+          Authorization: "{{ dt_auth_header }}"
         body_format: json
-        body: "{ \"comment\": \"Invoked remediation action successfully executed.\", \"user\": \"{{commentuser}}\", \"context\": \"Ansible Tower\" }"
+        body: { "message": "Invoked remediation action successfully executed.", "context": "{{ commentuser }}" }
+        status_code: [200, 201]
+        validate_certs: no
       when: state == "OPEN" and (result.status == 200 or result.status == 201 or result.status == 202)
 
     - name: push error comment to dynatrace
       uri:
-        url: "{{dtcommentapiurl}}"
+        url: "{{ dt_comment_url }}"
         method: POST
+        headers:
+          Authorization: "{{ dt_auth_header }}"
         body_format: json
-        body: "{ \"comment\": \"Invoked remediation action failed. \", \"user\": \"{{commentuser}}\", \"context\": \"Ansible Tower\" }"
+        body: { "message": "Invoked remediation action failed.", "context": "{{ commentuser }}" }
+        status_code: [200, 201]
+        validate_certs: no
       when: state == "OPEN" and (result.status != 200 and result.status != 201 and result.status != 202)

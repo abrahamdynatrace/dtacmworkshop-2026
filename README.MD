@@ -47,12 +47,19 @@ Cluster/zone/size are overridable via env vars, e.g.:
 GKE_ZONE=europe-west1-b GKE_MACHINE_TYPE=e2-standard-4 bash setupenv.sh
 ```
 
-### Self-healing wiring (manual step)
-`configureAnsible.sh` prints an AWX remediation launch URL like:
-```
-http://<AWX_IP>/api/v2/job_templates/<id>/launch/
-```
-In Dynatrace, create a **Problem notification → Ansible/AWX (or custom webhook)** pointing at that URL, authenticated with the AWX `admin` credentials. When Dynatrace opens a problem on the `carts` service in production, AWX runs `playbooks/remediation.yaml`.
+### Self-healing wiring (in-cluster poller — no public AWX)
+AWX is deployed as **ClusterIP** (no public IP). Instead of exposing it and configuring a
+Dynatrace SaaS webhook, an **in-cluster poller** (a CronJob, deployed by step 4) checks Dynatrace
+for open problems **through the in-cluster ActiveGate** and launches the AWX `remediation` job
+template over internal DNS. Nothing inbound from the internet is required.
+
+- Deployed automatically by `4-DeployTower/deployTower.sh` (or run `utils/deploy-remediation-poller.sh`).
+- The Dynatrace API token needs scopes **`problems.read`** and **`problems.write`** (it comments a marker back on each handled problem for idempotency).
+- Watch it: `kubectl -n awx get cronjob,jobs` and `kubectl -n awx logs -l job-name --tail=50 --prefix`.
+- Access the AWX UI: `kubectl -n awx port-forward svc/awx-service 8080:80` → http://localhost:8080
+
+To narrow which problems trigger remediation, set `PROBLEM_SELECTOR` (URL-encoded Dynatrace
+problem selector) when running `deploy-remediation-poller.sh`.
 
 ## Cleanup
 ```bash

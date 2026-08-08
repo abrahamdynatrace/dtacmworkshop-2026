@@ -11,7 +11,7 @@ This is a **demo/workshop**, not a production reference. It deliberately exposes
 | front-end | production | LoadBalancer | public demo storefront |
 | carts | production | LoadBalancer | target of the load test |
 | jenkins | cicd | LoadBalancer | **admin UI, default creds** |
-| awx-service | awx | LoadBalancer | **admin UI**, generated admin password |
+| awx-service | awx | **ClusterIP** (2026: was LoadBalancer) | admin UI via `port-forward`; triggered internally by the poller |
 | carts / front-end-canary | dev | LoadBalancer | created during the canary pipeline |
 
 ### GCP SCC finding: "Initial Access: GKE NodePort service created"
@@ -47,7 +47,29 @@ kubectl -n dev patch svc carts     -p '{"spec":{"type":"ClusterIP"}}'
 ALLOWED_CIDR="$(curl -s ifconfig.me)/32" bash utils/harden-network.sh
 ```
 
+## Self-healing without exposing AWX (in-cluster poller)
+Dynatrace SaaS cannot push a webhook to an internal endpoint, and there is no native
+"route this webhook through my ActiveGate" for generic problem notifications. So instead of
+exposing AWX, this repo uses a **pull** model:
+
+- AWX is **ClusterIP** (no public IP).
+- `manifests/remediation-poller/` runs a CronJob (namespace `awx`, every minute) that:
+  1. queries the Dynatrace Problems API v2 **through the in-cluster ActiveGate**
+     (`https://dynakube-activegate.dynatrace.svc.cluster.local/e/<env>/api`), and
+  2. launches the AWX `remediation` job template via internal DNS
+     (`http://awx-service.awx.svc.cluster.local`).
+- Idempotency: the poller posts a marker comment back on each handled problem and skips
+  problems that already have it.
+- Deploy with `utils/deploy-remediation-poller.sh` (done automatically by step 4).
+- Token scopes required: `problems.read`, `problems.write`.
+
+This means **no Dynatrace webhook/notification is configured** and **no inbound internet access
+to AWX** is needed. If you prefer the classic push model, expose AWX via LoadBalancer and restrict
+`loadBalancerSourceRanges` to Dynatrace's published egress ranges + your office CIDR instead.
+
 ## Known residual risks
-- **Jenkins & AWX** ship with weak/default credentials. Change them, and never leave these LBs open to `0.0.0.0/0`.
-- **Self-healing webhook**: Dynatrace SaaS must reach the AWX launch URL. If you lock AWX to your office CIDR, also allow Dynatrace's egress ranges, or (better) route the call through a Dynatrace **ActiveGate** inside the cluster instead of a public LoadBalancer.
+- **Jenkins** still ships with weak/default credentials on a public LoadBalancer — change the
+  password and restrict it (harden-network.sh), or move it to ClusterIP + port-forward too.
+- **AWX admin password** is auto-generated (secret `awx-admin-password`); rotate if needed.
+- The poller's Dynatrace token has `problems.read`/`problems.write` — scope it to exactly that.
 - Old demo container images (see MIGRATION-NOTES) are not security-patched.

@@ -54,6 +54,8 @@ The workshop stopped working because several dependencies were removed or deprec
 - New `manifests/security/networkpolicy.yaml`: default-deny ingress + allow-same-namespace + GKE health-check ranges for `dev`/`production`.
 - New `utils/harden-network.sh`: restricts every LoadBalancer to your `ALLOWED_CIDR` and adds an office-CIDR ingress NetworkPolicy.
 - `setupenv.sh`: added `--enable-dataplane-v2` (NetworkPolicy enforcement) and an optional auto-hardening step gated on `ALLOWED_CIDR`.
+- **AWX is now ClusterIP** (was LoadBalancer) — no public exposure. `configureAnsible.sh` reaches it via `kubectl port-forward`.
+- **In-cluster self-healing poller** (`manifests/remediation-poller/` + `utils/deploy-remediation-poller.sh`) replaces the public Dynatrace→AWX webhook: a CronJob queries Dynatrace problems **through the in-cluster ActiveGate** and launches the AWX `remediation` template over internal DNS. `playbooks/remediation.yaml` comment calls were modernized to the Dynatrace Problems **API v2**.
 - Full details and an already-running-cluster mitigation are in [SECURITY.md](SECURITY.md).
 
 ## Known risks / things you may still need to fix

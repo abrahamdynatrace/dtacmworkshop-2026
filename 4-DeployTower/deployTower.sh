@@ -31,3 +31,6 @@ kubectl -n awx rollout status deploy/awx-web --timeout=600s
 
 echo "Configuring AWX (projects, inventory, job templates)..."
 ../utils/configureAnsible.sh
+
+echo "Deploying the in-cluster self-healing poller (keeps AWX private)..."
+../utils/deploy-remediation-poller.sh
