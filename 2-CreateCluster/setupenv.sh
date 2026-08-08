@@ -48,7 +48,8 @@ gcloud container clusters create "$GKE_CLUSTER_NAME" \
     --zone="$GKE_ZONE" \
     --num-nodes="$GKE_NUM_NODES" \
     --machine-type="$GKE_MACHINE_TYPE" \
-    --release-channel="$GKE_RELEASE_CHANNEL"
+    --release-channel="$GKE_RELEASE_CHANNEL" \
+    --enable-dataplane-v2   # required for NetworkPolicy enforcement (2026 security hardening)
 
 echo "Fetching cluster credentials..."
 gcloud container clusters get-credentials "$GKE_CLUSTER_NAME" --zone="$GKE_ZONE"
@@ -70,6 +71,18 @@ kubectl -n production rollout status deploy/front-end --timeout=300s || true
 
 echo "Starting production load generator (background)..."
 nohup ../utils/cartsLoadTest.sh > /tmp/cartsLoadTest.log 2>&1 &
+
+# Network hardening (2026): dev services are ClusterIP; if you set ALLOWED_CIDR we also
+# apply default-deny NetworkPolicies and restrict every LoadBalancer to your office CIDR.
+if [ -n "${ALLOWED_CIDR:-}" ]; then
+    echo "Applying network policies and restricting LoadBalancers to $ALLOWED_CIDR ..."
+    kubectl apply -f ../manifests/security/networkpolicy.yaml
+    ../utils/harden-network.sh "$ALLOWED_CIDR"
+else
+    echo "NOTE: ALLOWED_CIDR not set - LoadBalancers are still open. To harden, run:"
+    echo "  kubectl apply -f ../manifests/security/networkpolicy.yaml"
+    echo "  ALLOWED_CIDR=<your office CIDR> ../utils/harden-network.sh"
+fi
 
 echo "-----------------------"
 echo "Deployment Complete"

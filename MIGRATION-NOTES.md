@@ -49,6 +49,13 @@ The workshop stopped working because several dependencies were removed or deprec
 - `5-Cleanup/cleanup.sh`: removes Dynatrace via `delete-dt-operator.sh`, drops the removed PSP/CRD deletions, uses `--ignore-not-found`, `pgrep` for the load-test PID.
 - `5-Cleanup/deleteAll.sh`: GKE-only cluster delete; removed ActiveGate-VM delete and classic de-registration.
 
+### 7. Security / network exposure hardening
+- **NodePort → ClusterIP** for `dev` front-end and carts (cleared the GCP SCC "NodePort service created" finding). Reach dev services via `kubectl port-forward`.
+- New `manifests/security/networkpolicy.yaml`: default-deny ingress + allow-same-namespace + GKE health-check ranges for `dev`/`production`.
+- New `utils/harden-network.sh`: restricts every LoadBalancer to your `ALLOWED_CIDR` and adds an office-CIDR ingress NetworkPolicy.
+- `setupenv.sh`: added `--enable-dataplane-v2` (NetworkPolicy enforcement) and an optional auto-hardening step gated on `ALLOWED_CIDR`.
+- Full details and an already-running-cluster mitigation are in [SECURITY.md](SECURITY.md).
+
 ## Known risks / things you may still need to fix
 1. **Legacy demo images** (`wmsegar/jenkins:5.0`, `wmsegar/carts:1.0/3.0`, `dynatracesockshop/*:0.5.0`) are pulled as-is from Docker Hub. They are amd64 (fine on GKE), but if any are deleted upstream you must rebuild them — their build sources are not in this repo.
 2. **Jenkins pipeline internals** (pod templates, plugins) are baked into `wmsegar/jenkins:5.0` and are old; the pipeline definition lives in `PipelineWithIntegration.txt` / `3-DeployJenkins/config.xml`.

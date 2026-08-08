@@ -79,4 +79,6 @@ spec:
     targetPort: 8080
   selector:
     app: carts
-  type: NodePort
+  # 2026 security: was NodePort (flagged by GCP SCC). ClusterIP keeps carts-dev internal.
+  #   kubectl -n dev port-forward svc/carts 8080:80
+  type: ClusterIP

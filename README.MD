@@ -66,6 +66,19 @@ bash deleteAll.sh   # delete the entire GKE cluster
 
 *(The diagram shows the original topology; the standalone ActiveGate VM is gone — the DynaKube now runs an embedded ActiveGate inside the cluster.)*
 
+## Security / network exposure
+This workshop exposes several services (including public LoadBalancers for Jenkins and AWX). In a monitored corporate GCP project this **will** trigger findings (e.g. GCP SCC "NodePort service created"). See **[SECURITY.md](SECURITY.md)** for the full exposure table and hardening steps. Quick version:
+
+```bash
+# dev services are ClusterIP now; reach them via port-forward:
+kubectl -n dev port-forward svc/front-end 8080:8080
+
+# restrict every LoadBalancer to your office IP + apply default-deny network policies:
+kubectl apply -f manifests/security/networkpolicy.yaml
+ALLOWED_CIDR="$(curl -s ifconfig.me)/32" bash utils/harden-network.sh
+```
+`setupenv.sh` runs the hardening automatically if you export `ALLOWED_CIDR` before running it, and creates the cluster with `--enable-dataplane-v2` so NetworkPolicies are enforced.
+
 ## Known risks / external dependencies
 These are outside this repo's control and may need attention when you run it — details in [MIGRATION-NOTES.md](MIGRATION-NOTES.md):
 - **Custom demo images** from 2019-2021 (`wmsegar/jenkins`, `dynatracesockshop/*`, `wmsegar/carts`) are pulled from Docker Hub as-is. If any are removed or fail to run they must be rebuilt from their (external) sources.

@@ -1,0 +1,94 @@
+# Defense-in-depth network policies for the SockShop namespaces (2026 security hardening).
+#
+# Model: default-deny all ingress, then explicitly allow:
+#   - traffic between pods in the SAME namespace (front-end -> catalogue/carts/orders -> db),
+#   - GKE LoadBalancer health-check / forwarding ranges (needed for the public LB services).
+#
+# External client access to the LB-exposed services (front-end/carts in production) is added
+# separately by utils/harden-network.sh, which allows ONLY your office CIDR. Until that runs,
+# the app is effectively private (fail-closed) — that is intentional.
+#
+# NOTE: NetworkPolicy is only ENFORCED if the cluster has network policy enabled
+# (GKE Dataplane V2, or the Calico add-on). See README / setupenv.sh (--enable-dataplane-v2).
+# Egress is intentionally left unrestricted so OneAgent -> ActiveGate and DNS keep working.
+#
+# Apply with:  kubectl apply -f manifests/security/networkpolicy.yaml
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: dev
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: dev
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gke-health-checks
+  namespace: dev
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # GCP load balancer & health-check source ranges.
+        - ipBlock:
+            cidr: 35.191.0.0/16
+        - ipBlock:
+            cidr: 130.211.0.0/22
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gke-health-checks
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 35.191.0.0/16
+        - ipBlock:
+            cidr: 130.211.0.0/22
